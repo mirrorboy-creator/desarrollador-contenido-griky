@@ -54,21 +54,14 @@ async def health():
 async def generate_content_endpoint(
     request: Request,
     files: list[UploadFile] = File(...),
-    api_key: str = Form(...),
 ):
     """
-    Main endpoint: accepts uploaded files + API key, streams content generation progress.
+    Main endpoint: accepts uploaded files, streams content generation progress.
     Returns an SSE stream with progress updates and finally the download URL.
     """
-    # Validate API key presence
-    if not api_key or not api_key.strip():
-        raise HTTPException(status_code=400, detail="Se requiere una API key de Anthropic válida.")
-
-    api_key = api_key.strip()
-
-    # Validate Claude API key format
-    if not api_key.startswith("sk-"):
-        raise HTTPException(status_code=400, detail="La API key debe comenzar con 'sk-'.")
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY no está configurada en el servidor.")
 
     # Process uploaded files
     if not files:
