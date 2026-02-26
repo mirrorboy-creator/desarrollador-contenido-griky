@@ -27,10 +27,13 @@ app = FastAPI(title="Desarrollador de Contenido Griky", version="1.0.0")
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 GENERATED_DIR = BASE_DIR / "generated"
-UPLOAD_DIR.mkdir(exist_ok=True)
-GENERATED_DIR.mkdir(exist_ok=True)
+STATIC_DIR = BASE_DIR / "static"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(GENERATED_DIR, exist_ok=True)
+os.makedirs(STATIC_DIR, exist_ok=True)
 
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+os.makedirs(BASE_DIR / "static", exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".xlsx", ".xls", ".txt"}
