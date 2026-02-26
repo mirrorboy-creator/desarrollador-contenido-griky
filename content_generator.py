@@ -41,36 +41,154 @@ async def fetch_citations(topic: str, area: str) -> list[dict]:
         return []
 
 
+def _parse_raw_authors(raw: object) -> list[str]:
+    """Return a list of individual author strings from various API formats."""
+    if isinstance(raw, list):
+        return [str(a).strip() for a in raw if str(a).strip()]
+    if not raw or not str(raw).strip():
+        return []
+    s = str(raw).strip()
+    # Split on "; " first (common separator), then " and ", then ", " only if result looks valid
+    if "; " in s:
+        return [a.strip() for a in s.split("; ") if a.strip()]
+    if " and " in s.lower():
+        return [a.strip() for a in re.split(r'\s+and\s+', s, flags=re.IGNORECASE) if a.strip()]
+    return [s]
+
+
+def _author_to_apa(author: str) -> tuple[str, str]:
+    """
+    Convert a single author string to (last_name, apa_form).
+    apa_form example: "García, J. M."
+    """
+    author = author.strip()
+    if not author:
+        return ("Autor desconocido", "Autor desconocido")
+
+    # Already in "Last, First" format
+    if "," in author:
+        parts = author.split(",", 1)
+        last = parts[0].strip()
+        first_part = parts[1].strip() if len(parts) > 1 else ""
+        initials = _initials(first_part)
+        apa = f"{last}, {initials}".rstrip(", ")
+        return (last, apa)
+
+    # "First [Middle] Last" format
+    words = author.split()
+    if len(words) == 1:
+        return (words[0], words[0])
+    last = words[-1]
+    initials = _initials(" ".join(words[:-1]))
+    apa = f"{last}, {initials}".rstrip(", ")
+    return (last, apa)
+
+
+def _initials(name_part: str) -> str:
+    """Turn 'John Michael' or 'J. M.' into 'J. M.'"""
+    tokens = name_part.strip().split()
+    result = []
+    for t in tokens:
+        t = t.strip(".")
+        if t:
+            result.append(t[0].upper() + ".")
+    return " ".join(result)
+
+
+def _build_link(c: dict) -> str:
+    """Return the best available URL/DOI string."""
+    doi = c.get("doi", "")
+    url = c.get("url", c.get("link", ""))
+    if doi:
+        doi = doi.strip()
+        if doi.startswith("http"):
+            return doi
+        return f"https://doi.org/{doi}"
+    if url:
+        return url.strip()
+    return ""
+
+
 def format_citations_apa(citations: list[dict]) -> str:
-    """Format citations list as APA references."""
+    """
+    Format a list of citation dicts as a numbered APA reference list.
+    Returns the full block as a string (entries separated by blank lines).
+    """
     if not citations:
         return ""
-    lines = []
+    entries = []
     for c in citations:
-        # Try to build APA from common fields
-        authors = c.get("authors", c.get("author", "Autor desconocido"))
-        year = c.get("year", c.get("published_year", "s.f."))
-        title = c.get("title", "Sin título")
-        journal = c.get("journal", c.get("venue", c.get("source", "")))
-        doi = c.get("doi", c.get("url", ""))
-        volume = c.get("volume", "")
-        issue = c.get("issue", c.get("number", ""))
-        pages = c.get("pages", "")
+        _, full_ref = _format_single_citation(c)
+        entries.append(full_ref)
+    return "\n\n".join(entries)
 
-        apa = f"{authors} ({year}). {title}."
-        if journal:
-            apa += f" *{journal}*"
+
+def _format_single_citation(c: dict) -> tuple[str, str]:
+    """
+    Returns (in_text, full_reference) for one citation dict.
+    in_text  → "(Apellido, Año)"
+    full_ref → "Apellido, N. (Año). Título. *Revista*, *Vol*(Núm), pp–pp. https://..."
+    """
+    raw_authors = c.get("authors", c.get("author", ""))
+    year = str(c.get("year", c.get("published_year", "s.f."))).strip()
+    title = c.get("title", "Sin título").strip()
+    journal = c.get("journal", c.get("venue", c.get("source", ""))).strip()
+    volume = str(c.get("volume", "")).strip()
+    issue = str(c.get("issue", c.get("number", ""))).strip()
+    pages = str(c.get("pages", "")).strip()
+    link = _build_link(c)
+
+    author_list = _parse_raw_authors(raw_authors)
+    if not author_list:
+        author_list = ["Autor desconocido"]
+
+    apa_authors_parts = []
+    first_last = "Autor desconocido"
+    for i, a in enumerate(author_list):
+        last, apa_form = _author_to_apa(a)
+        if i == 0:
+            first_last = last
+        apa_authors_parts.append(apa_form)
+
+    # APA 7: up to 20 authors with ", " separator; last preceded by "& "
+    if len(apa_authors_parts) > 1:
+        authors_str = ", ".join(apa_authors_parts[:-1]) + ", & " + apa_authors_parts[-1]
+    else:
+        authors_str = apa_authors_parts[0]
+
+    in_text = f"({first_last}, {year})"
+
+    # Build full reference
+    ref = f"{authors_str} ({year}). {title}."
+    if journal:
+        ref += f" *{journal}*"
         if volume:
-            apa += f", *{volume}*"
-        if issue:
-            apa += f"({issue})"
+            ref += f", *{volume}*"
+            if issue:
+                ref += f"({issue})"
         if pages:
-            apa += f", {pages}"
-        apa += "."
-        if doi:
-            apa += f" {doi}"
-        lines.append(apa)
-    return "\n\n".join(lines)
+            ref += f", {pages}"
+        ref += "."
+    if link:
+        ref += f" {link}"
+
+    return in_text, ref
+
+
+def build_citations_block(citations: list[dict]) -> str:
+    """
+    Build the citations block passed to Claude, showing both
+    the in-text key and the full APA reference for every source.
+    """
+    if not citations:
+        return "No hay citas disponibles. Indica con [CITA REQUERIDA: tema] dónde se necesitaría una referencia."
+
+    lines = ["Usa estas citas reales. Para cada una se muestra la clave en texto y la referencia completa:\n"]
+    for i, c in enumerate(citations, 1):
+        in_text, full_ref = _format_single_citation(c)
+        lines.append(f"{i}. Cita en texto: {in_text}")
+        lines.append(f"   Referencia completa: {full_ref}")
+    return "\n".join(lines)
 
 
 def build_system_prompt() -> str:
@@ -90,9 +208,12 @@ SUGERENCIAS DE IMÁGENES:
 - Colócalos en lugares estratégicos donde una imagen mejoraría la comprensión
 
 CITAS ACADÉMICAS:
-- Integra las citas naturalmente en el texto usando formato APA: (Autor, año)
-- Incluye la lista completa de referencias en APA al final de cada unidad
-- Usa las citas reales proporcionadas, no inventes referencias
+- Integra las citas en el texto usando EXACTAMENTE este formato APA: (Apellido, Año) — por ejemplo: (García, 2021) o (Smith & Jones, 2019)
+- Usa SOLO los apellidos del primer autor (o primer y segundo si son dos)
+- Al final de cada unidad incluye una sección "## Referencias" con TODAS las fuentes citadas
+- Cada entrada de referencia debe seguir APA 7 completo: Apellido, N. (Año). Título del trabajo. *Revista*, *Vol*(Núm), pp–pp. https://doi.org/xxxxx
+- Asegúrate de que CADA autor citado en el texto tenga su entrada completa en Referencias
+- Usa las citas reales proporcionadas; no inventes referencias
 
 ESTRUCTURA:
 - Sigue EXACTAMENTE la estructura de unidades, temas y subtemas del silabo
@@ -111,8 +232,11 @@ def build_content_prompt(
     unit_name: str,
     unit_topics: str,
     subject_area: str,
-    citations_text: str,
+    citations: list[dict],
+    additional_instructions: str = "",
 ) -> str:
+    citations_block = build_citations_block(citations)
+    extra = f"\n=== INSTRUCCIONES ADICIONALES DEL AUTOR ===\n{additional_instructions.strip()}\n" if additional_instructions.strip() else ""
     return f"""Basándote en los siguientes documentos del curso, desarrolla el contenido académico completo para la unidad indicada.
 
 {course_context}
@@ -124,15 +248,15 @@ def build_content_prompt(
 {unit_topics}
 
 === CITAS ACADÉMICAS DISPONIBLES ===
-{citations_text if citations_text else "No hay citas disponibles. Indica dónde irían referencias relevantes."}
-
+{citations_block}
+{extra}
 === INSTRUCCIONES ESPECÍFICAS ===
 1. Desarrolla TODO el contenido de esta unidad con extensión completa según el silabo
 2. Sigue la estructura exacta del template/plantilla proporcionada
-3. Integra las citas académicas de forma natural en el texto
+3. Integra las citas en el texto con formato (Apellido, Año) — usa los apellidos y años exactos de las citas proporcionadas arriba
 4. Incluye [IMAGEN SUGERIDA: ...] en puntos estratégicos
 5. Aplica las reglas matemáticas si el tema incluye fórmulas (solo Unicode, nunca LaTeX)
-6. Termina con una sección "Referencias" en formato APA completo
+6. Al finalizar incluye una sección "## Referencias" con las entradas APA completas de TODAS las fuentes que citaste, copiando exactamente las referencias completas de la sección "CITAS ACADÉMICAS DISPONIBLES"
 7. El contenido debe ser académicamente riguroso y apropiado para nivel universitario
 
 Desarrolla el contenido completo ahora:"""

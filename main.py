@@ -54,6 +54,8 @@ async def health():
 async def generate_content_endpoint(
     request: Request,
     files: list[UploadFile] = File(...),
+    unit_filter: str = Form(""),
+    additional_instructions: str = Form(""),
 ):
     """
     Main endpoint: accepts uploaded files, streams content generation progress.
@@ -128,7 +130,17 @@ async def generate_content_endpoint(
                 yield f"data: {json.dumps({'type': 'error', 'message': f'Error al analizar el curso: {str(e)}'})}\n\n"
                 return
 
-            yield f"data: {json.dumps({'type': 'status', 'message': f'Curso identificado: {subject_area} | {len(units)} unidades encontradas.', 'progress': 20})}\n\n"
+            # Filter to a single unit/week if the user requested one
+            unit_filter_clean = unit_filter.strip()
+            if unit_filter_clean:
+                filtered = [u for u in units if unit_filter_clean.lower() in u.get("name", "").lower()]
+                if filtered:
+                    units = filtered
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'Filtro aplicado: generando solo «{unit_filter_clean}» ({len(units)} unidad/es).', 'progress': 20})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'warning', 'message': f'No se encontró «{unit_filter_clean}» entre las unidades. Se generarán todas.'})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'status', 'message': f'Curso identificado: {subject_area} | {len(units)} unidades a generar.', 'progress': 20})}\n\n"
 
             # Step 4: Generate content unit by unit
             units_content = []
@@ -153,7 +165,8 @@ async def generate_content_endpoint(
                     unit_name=unit_name,
                     unit_topics=unit_topics,
                     subject_area=subject_area,
-                    citations_text=citations_text,
+                    citations=citations,
+                    additional_instructions=additional_instructions,
                 )
 
                 try:

@@ -178,8 +178,26 @@
       letter-spacing: 0.1px;
     }
     .form-label .required { color: var(--griky-pink); margin-left: 2px; }
+    .form-optional { font-weight: 400; color: var(--griky-gray); }
     .form-hint { font-size: 12px; color: var(--griky-gray); margin-top: 5px; }
 
+    .text-input, .textarea-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid var(--griky-border);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      color: var(--griky-dark);
+      background: white;
+      font-family: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .text-input:focus, .textarea-input:focus {
+      outline: none;
+      border-color: var(--griky-pink);
+      box-shadow: 0 0 0 3px rgba(240,62,95,0.10);
+    }
+    .textarea-input { resize: vertical; min-height: 72px; }
 
     /* ─── DROP ZONE ─── */
     .dropzone {
@@ -546,20 +564,24 @@
           <div class="dropzone-icon">📂</div>
           <h3>Arrastra tus documentos aquí</h3>
           <p>o <span class="browse-link" onclick="document.getElementById('fileInput').click()">examina tus archivos</span></p>
-          <div class="doc-types">
-            <span class="doc-type-badge">📋 Sílabo</span>
-            <span class="doc-type-badge">📖 Plantilla eBook</span>
-            <span class="doc-type-badge">🎨 Diseño Instruccional</span>
-            <span class="doc-type-badge">🗺️ Blueprint</span>
-            <span class="doc-type-badge">📊 Rúbricas</span>
-            <span class="doc-type-badge">🎯 Competencias</span>
-            <span class="doc-type-badge">✏️ Actividades</span>
-            <span class="doc-type-badge">📝 Evaluaciones</span>
-          </div>
         </div>
 
         <!-- File List -->
         <div class="file-list" id="fileList"></div>
+
+        <!-- Unit Filter -->
+        <div class="form-section" style="margin-top:20px">
+          <label class="form-label" for="unitFilter">Semana o Unidad a generar <span class="form-optional">(opcional)</span></label>
+          <input type="text" id="unitFilter" class="text-input" placeholder="Ej: Semana 7, Unidad 3, Módulo 2..." autocomplete="off" />
+          <p class="form-hint">Si lo dejas vacío, se generarán todas las unidades del curso.</p>
+        </div>
+
+        <!-- Additional Instructions -->
+        <div class="form-section">
+          <label class="form-label" for="additionalInstructions">Instrucciones adicionales <span class="form-optional">(opcional)</span></label>
+          <textarea id="additionalInstructions" class="textarea-input" rows="3" placeholder="Ej: tono conversacional, nivel introductorio, énfasis en ejemplos latinoamericanos, audiencia de ingeniería..."></textarea>
+          <p class="form-hint">Indicaciones de tono, audiencia, contexto regional o áreas de énfasis para Claude.</p>
+        </div>
 
         <!-- Generate Button -->
         <button type="submit" class="btn-generate" id="generateBtn" disabled>
@@ -829,6 +851,8 @@ async function startGeneration() {
   for (const f of state.files) {
     formData.append('files', f);
   }
+  formData.append('unit_filter', document.getElementById('unitFilter').value.trim());
+  formData.append('additional_instructions', document.getElementById('additionalInstructions').value.trim());
 
   addLog(`Subiendo ${state.files.length} archivo(s)...`, 'info');
 
