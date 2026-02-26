@@ -28,9 +28,9 @@ BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 GENERATED_DIR = BASE_DIR / "generated"
 STATIC_DIR = BASE_DIR / "static"
-UPLOAD_DIR.mkdir(exist_ok=True)
-GENERATED_DIR.mkdir(exist_ok=True)
-STATIC_DIR.mkdir(exist_ok=True)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(GENERATED_DIR, exist_ok=True)
+os.makedirs(STATIC_DIR, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
