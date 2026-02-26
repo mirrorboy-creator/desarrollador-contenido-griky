@@ -180,41 +180,6 @@
     .form-label .required { color: var(--griky-pink); margin-left: 2px; }
     .form-hint { font-size: 12px; color: var(--griky-gray); margin-top: 5px; }
 
-    /* API Key Input */
-    .api-key-wrapper {
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
-    .api-key-input {
-      width: 100%;
-      padding: 11px 44px 11px 14px;
-      border: 1.5px solid var(--griky-border);
-      border-radius: var(--radius-sm);
-      font-size: 14px;
-      color: var(--griky-dark);
-      background: white;
-      transition: border-color 0.2s, box-shadow 0.2s;
-      font-family: 'Courier New', monospace;
-    }
-    .api-key-input:focus {
-      outline: none;
-      border-color: var(--griky-pink);
-      box-shadow: 0 0 0 3px rgba(240,62,95,0.10);
-    }
-    .toggle-visibility {
-      position: absolute;
-      right: 12px;
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: var(--griky-gray);
-      font-size: 18px;
-      padding: 2px;
-      display: flex;
-      align-items: center;
-    }
-    .toggle-visibility:hover { color: var(--griky-pink); }
 
     /* ─── DROP ZONE ─── */
     .dropzone {
@@ -562,38 +527,6 @@
 <main class="container">
   <form id="generatorForm" novalidate>
 
-    <!-- API KEY CARD -->
-    <div class="card" style="margin-bottom:20px">
-      <div class="card-header">
-        <div class="card-icon">🔑</div>
-        <div class="card-header-text">
-          <h2>Configuración</h2>
-          <p>API key de Anthropic para usar Claude claude-opus-4-6</p>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="form-section">
-          <label class="form-label" for="apiKey">API Key de Anthropic <span class="required">*</span></label>
-          <div class="api-key-wrapper">
-            <input
-              type="password"
-              id="apiKey"
-              name="api_key"
-              class="api-key-input"
-              placeholder="sk-ant-api03-..."
-              autocomplete="off"
-              spellcheck="false"
-              required
-            />
-            <button type="button" class="toggle-visibility" id="toggleKey" title="Mostrar/ocultar">👁</button>
-          </div>
-          <p class="form-hint">Tu API key nunca se almacena en el servidor. Obtenla en <strong>console.anthropic.com</strong></p>
-        </div>
-        <div class="info-box">
-          💡 <strong>Nota:</strong> Se usa el modelo <code>claude-opus-4-6</code> para máxima calidad de contenido académico. El tiempo de generación depende del número de unidades del curso.
-        </div>
-      </div>
-    </div>
 
     <!-- FILES CARD -->
     <div class="card">
@@ -705,8 +638,6 @@ const fileList       = document.getElementById('fileList');
 const generateBtn    = document.getElementById('generateBtn');
 const btnText        = document.getElementById('btnText');
 const btnIcon        = document.getElementById('btnIcon');
-const apiKeyInput    = document.getElementById('apiKey');
-const toggleKey      = document.getElementById('toggleKey');
 const progressPanel  = document.getElementById('progressPanel');
 const resultPanel    = document.getElementById('resultPanel');
 const errorPanel     = document.getElementById('errorPanel');
@@ -721,13 +652,6 @@ const resetBtn       = document.getElementById('resetBtn');
 const progressSubtitle = document.getElementById('progressSubtitle');
 const resultSubtitle   = document.getElementById('resultSubtitle');
 const errorMessage     = document.getElementById('errorMessage');
-
-// ─── API KEY TOGGLE ───────────────────────────────────────
-toggleKey.addEventListener('click', () => {
-  const isPassword = apiKeyInput.type === 'password';
-  apiKeyInput.type = isPassword ? 'text' : 'password';
-  toggleKey.textContent = isPassword ? '🙈' : '👁';
-});
 
 // ─── FILE HELPERS ─────────────────────────────────────────
 function formatSize(bytes) {
@@ -797,8 +721,7 @@ function renderFileList() {
 
 function updateGenerateBtn() {
   const hasFiles = state.files.length > 0;
-  const hasKey = apiKeyInput.value.trim().startsWith('sk-');
-  generateBtn.disabled = !(hasFiles && hasKey) || state.isGenerating;
+  generateBtn.disabled = !hasFiles || state.isGenerating;
 }
 
 // ─── DRAG & DROP ──────────────────────────────────────────
@@ -823,8 +746,6 @@ fileInput.addEventListener('change', () => {
   addFiles(fileInput.files);
   fileInput.value = ''; // reset so same file can be re-added after removal
 });
-
-apiKeyInput.addEventListener('input', updateGenerateBtn);
 
 // ─── LOG HELPER ───────────────────────────────────────────
 function addLog(message, type = 'info') {
@@ -880,20 +801,15 @@ document.getElementById('generatorForm').addEventListener('submit', async (e) =>
   e.preventDefault();
   if (state.isGenerating) return;
 
-  const apiKey = apiKeyInput.value.trim();
-  if (!apiKey.startsWith('sk-')) {
-    showError('La API key debe comenzar con "sk-". Verifica tu clave de Anthropic.');
-    return;
-  }
   if (state.files.length === 0) {
     showError('Debes subir al menos un archivo.');
     return;
   }
 
-  startGeneration(apiKey);
+  startGeneration();
 });
 
-async function startGeneration(apiKey) {
+async function startGeneration() {
   state.isGenerating = true;
   generateBtn.disabled = true;
   btnIcon.textContent = '⏳';
@@ -910,7 +826,6 @@ async function startGeneration(apiKey) {
 
   // Build FormData
   const formData = new FormData();
-  formData.append('api_key', apiKey);
   for (const f of state.files) {
     formData.append('files', f);
   }
